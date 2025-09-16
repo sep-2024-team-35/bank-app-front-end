@@ -4,6 +4,10 @@ FROM node:20-alpine AS ebanksep-fe-builder
 LABEL maintainer="Luka Usljebrka lukauslje13@gmail.com"
 
 WORKDIR /app
+
+#ARG REACT_APP_API_URL
+#ENV REACT_APP_API_URL=$REACT_APP_API_URL
+
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 COPY . .
