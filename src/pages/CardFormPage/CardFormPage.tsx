@@ -1,5 +1,5 @@
-import {useState} from "react";
-import {useLocation} from "react-router-dom";
+import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import "./CardFormPage.css";
 
 const CardFormPage = () => {
@@ -16,7 +16,6 @@ const CardFormPage = () => {
     const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         let value = e.target.value.replace(/\D/g, "");
         if (value.length > 16) value = value.slice(0, 16);
-
         const formatted = value.replace(/(.{4})/g, "$1 ").trim();
         setCardNumber(formatted);
     };
@@ -48,52 +47,65 @@ const CardFormPage = () => {
             return;
         }
 
-        const cleanCardNumber = cardNumber.replace(/\s/g, ""); // bez space
+        const cleanCardNumber = cardNumber.replace(/\s/g, "");
 
-        if (cleanCardNumber.length !== 16) {
-            alert("Broj kartice mora imati 16 cifara!");
-            return;
-        }
-        if (ccv.length !== 3) {
-            alert("CCV mora imati 3 cifre!");
-            return;
-        }
-        if (!/^\d{2}\/\d{2}$/.test(expirationDate)) {
-            alert("Datum isteka mora biti u formatu MM/YY!");
-            return;
-        }
-        if (!holder) {
-            alert("Ime vlasnika je obavezno!");
+        if (cleanCardNumber.length !== 16 || ccv.length !== 3 || !/^\d{2}\/\d{2}$/.test(expirationDate) || !holder) {
+            alert("Uneti podaci nisu validni!");
             return;
         }
 
         const payload = {
-            PrimaryAccountNumber: cleanCardNumber,
-            CardHolderName: holder,
-            ExpirationDate: expirationDate,
-            CVV: ccv
+            primaryAccountNumber: cleanCardNumber,
+            cardHolderName: holder,
+            expirationDate: expirationDate,
+            securityCode: ccv,
+            paymentRequestId: paymentID
         };
 
         try {
             setLoading(true);
-            const response = await fetch(`https://ebanksep-be.azurewebsites.net/api/payment/${paymentID}/pay`, {
-                method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(payload)
-            });
+            try {
+                const response = await fetch(`https://ebanksep-be.azurewebsites.net/api/payment/${paymentID}/pay`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
 
-            const data = await response.json();
+                const data = await response.json();
 
-            if (!response.ok) {
-                alert(`Greška prilikom plaćanja: ${data.error || JSON.stringify(data)}`);
-                return;
+                // Loguj sve što stigne iz backend-a
+                console.log("[DEBUG] Backend response:", data);
+
+                if (!response.ok) {
+                    // Ako backend pošalje error, redirektuj na ErrorUrl (ako ga vraća)
+                    if (data.redirectURL) {
+                        const url = new URL(data.redirectURL);
+                        url.searchParams.set("merchantOrderID", data.merchantOrderId);
+                        console.log("[DEBUG] Redirecting to:", url.toString());
+                        window.location.href = url.toString();
+                        return;
+                    }
+                    throw new Error(data.error || "Nepoznata greška");
+                }
+
+                // Redirekcija na success ili failed URL koji backend vraća
+                if (data.redirectURL) {
+                    // Dodaj merchantOrderID u query param
+                    const url = new URL(data.redirectURL);
+                    url.searchParams.set("merchantOrderID", data.merchantOrderId);
+                    console.log("[DEBUG] Redirecting to:", url.toString());
+                    window.location.href = url.toString();
+                } else {
+                    // fallback
+                    console.log("[DEBUG] Fallback alert, status:", data.status);
+                    alert(`Status transakcije: ${data.status}`);
+                }
+            } catch (err) {
+                console.error("[ERROR] Fetch error:", err);
+                alert("Došlo je do greške pri povezivanju sa serverom.");
+            } finally {
+                setLoading(false);
             }
-
-            alert(`Transakcija uspešno izvršena!
-Transaction ID: ${data.transactionID}
-Status: ${data.status}`);
 
         } catch (err) {
             console.error(err);
@@ -107,16 +119,14 @@ Status: ${data.status}`);
         <div className="card-form-container">
             <form className="card-form" onSubmit={handleSubmit}>
                 <h2>Kreditna kartica</h2>
-
                 <label>Broj kartice</label>
                 <input
                     type="text"
                     value={cardNumber}
                     onChange={handleCardNumberChange}
-                    maxLength={19} // 16 cifara + 3 space-a
+                    maxLength={19}
                     placeholder="1234 5678 9012 3456"
                 />
-
                 <label>CCV</label>
                 <input
                     type="text"
@@ -125,16 +135,14 @@ Status: ${data.status}`);
                     maxLength={3}
                     placeholder="123"
                 />
-
                 <label>Datum isteka</label>
                 <input
                     type="text"
                     value={expirationDate}
                     onChange={handleExpirationChange}
-                    maxLength={5} // MM/YY
+                    maxLength={5}
                     placeholder="MM/YY"
                 />
-
                 <label>Ime vlasnika</label>
                 <input
                     type="text"
@@ -142,7 +150,6 @@ Status: ${data.status}`);
                     onChange={(e) => setHolder(e.target.value)}
                     placeholder="Ime i prezime"
                 />
-
                 <button type="submit" disabled={loading}>
                     {loading ? "Procesiranje..." : "Potvrdi"}
                 </button>
